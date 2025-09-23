@@ -26,6 +26,11 @@ if(!empty($_GET['keyword'])) {
             <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
                 <ul class="nav navbar-nav">
                     <li><a href="form_user.php">Add new user</a></li>
+                    <li><a href="redis_demo.php">Redis Demo</a></li>
+                    <li><a href="redis_debug.php">Redis Debug</a></li>
+                    <li><a href="redis_data_viewer.php">Redis Data Viewer</a></li>
+                    <li><a href="localstorage_viewer.php">LocalStorage Viewer</a></li>
+                    <li><a href="test_localstorage.php">Test LocalStorage</a></li>
 
                 </ul>
                 <form class="navbar-form navbar-left">
