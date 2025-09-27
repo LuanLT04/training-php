@@ -1,42 +1,57 @@
 <?php
-session_start();
+
+
 
 require_once 'models/UserModel.php';
+
 $userModel = new UserModel();
 
-
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-if (!empty($_POST['submit'])) {
-    
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("Lỗi CSRF!!!");
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_verify()) {
+        die("CSRF token không hợp lệ!");
     }
 
-    $username = trim($_POST['username']);
-    $password = trim($_POST['password']);
+    if (!empty($_POST['submit'])) {
+        // Kiểm tra đầu vào
+        $username = isset($_POST['username']) ? trim($_POST['username']) : '';
+        $password = isset($_POST['password']) ? trim($_POST['password']) : '';
 
-    $user = $userModel->auth($username, $password);
-
-    if ($user) {
-        $_SESSION['id'] = $user[0]['id'];
-        $_SESSION['username'] = $username;
-        $_SESSION['message'] = 'Login successful';
-
-        if (!empty($_POST['remember'])) {
-            setcookie("remember_user", $user[0]['id'], time() + (30 * 24 * 60 * 60), "/", "", false, true);
+        // Kiểm tra định dạng username
+        if (!preg_match('/^[a-zA-Z0-9._@]+$/', $username)) {
+            $_SESSION['message'] = 'Tên người dùng không hợp lệ!';
+        } elseif (empty($password)) {
+            $_SESSION['message'] = 'Mật khẩu không được để trống!';
         } else {
-            setcookie("remember_user", "", time() - 3600, "/");
+            $users = [
+                'username' => $username,
+                'password' => $password
+            ];
+            $user = NULL;
+
+            if ($user = $userModel->auth($users['username'], $users['password'])) {
+                $_SESSION['id'] = $user[0]['id'];
+                $_SESSION['message'] = 'Đăng nhập thành công';
+
+                if ($redis) {
+                    try {
+                        $job = [
+                            'user_id' => $user[0]['id'],
+                            'username' => $user[0]['name'],
+                            'email' => $user[0]['email'] ?? '',
+                            'login_time' => date('Y-m-d H:i:s')
+                        ];
+                        $redis->lpush('user_login_queue', json_encode($job));
+                    } catch (Exception $e) {
+                        error_log("Redis push error: " . $e->getMessage());
+                    }
+                }
+
+                header('location: list_users.php');
+                exit;
+            } else {
+                $_SESSION['message'] = 'Đăng nhập thất bại';
+            }
         }
-
-        setcookie("session_id", $user[0]['id'], time() + 3600, "/", "", false, true);
-
-        header("Location: list_users.php");
-        exit;
-    } else {
-        $_SESSION['message'] = 'Login failed';
     }
 }
 ?>
@@ -44,54 +59,56 @@ if (!empty($_POST['submit'])) {
 <html>
 
 <head>
-    <title>User form</title>
+    <title>Biểu mẫu đăng nhập</title>
     <?php include 'views/meta.php' ?>
+    <!-- Thêm Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
 </head>
 
 <body>
     <?php include 'views/header.php' ?>
-
     <div class="container">
+        <?php if (!empty($_SESSION['message'])) { ?>
+        <div class="alert alert-info" role="alert">
+            <?php echo htmlspecialchars($_SESSION['message'], ENT_QUOTES, 'UTF-8'); ?>
+            <?php unset($_SESSION['message']); ?>
+        </div>
+        <?php } ?>
         <div id="loginbox" style="margin-top:50px;" class="mainbox col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2">
             <div class="panel panel-info">
                 <div class="panel-heading">
-                    <div class="panel-title">Login</div>
-                    <div style="float:right; font-size: 80%; position: relative; top:-10px"><a href="#">Forgot password?</a></div>
+                    <div class="panel-title">Đăng nhập</div>
+                    <div style="float:right; font-size: 80%; position: relative; top:-10px"><a href="#">Quên mật
+                            khẩu?</a></div>
                 </div>
-
                 <div style="padding-top:30px" class="panel-body">
-                    <form method="post" class="form-horizontal" role="form">
-                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-
+                    <form id="login-form" method="post" class="form-horizontal" role="form">
                         <div class="margin-bottom-25 input-group">
                             <span class="input-group-addon"><i class="glyphicon glyphicon-user"></i></span>
-                            <input id="login-username" type="text" class="form-control" name="username" value="" placeholder="username or email">
+                            <input id="login-username" type="text" class="form-control" name="username" value=""
+                                placeholder="Tên người dùng hoặc email">
                         </div>
-
                         <div class="margin-bottom-25 input-group">
                             <span class="input-group-addon"><i class="glyphicon glyphicon-lock"></i></span>
-                            <input id="login-password" type="password" class="form-control" name="password" value="" placeholder="password">
+                            <input id="login-password" type="password" class="form-control" name="password"
+                                placeholder="Mật khẩu">
                         </div>
-
                         <div class="margin-bottom-25">
-                            <input type="checkbox" tabindex="3" class="" name="remember" id="remember">
-                            <label for="remember"> Remember Me</label>
+                            <input type="checkbox" tabindex="3" name="remember" id="remember">
+                            <label for="remember"> Ghi nhớ tôi</label>
                         </div>
-
+                  
                         <div class="margin-bottom-25 input-group">
-                            <!-- Button -->
                             <div class="col-sm-12 controls">
-                                <button type="submit" name="submit" id="btn-login" value="submit" class="btn btn-primary">Submit</button>
-                                <a id="btn-fblogin" href="#" class="btn btn-primary">Login with Facebook</a>
+                                <button type="submit" name="submit" value="submit" class="btn btn-primary">Gửi</button>
+                                <a id="btn-fblogin" href="#" class="btn btn-primary">Đăng nhập bằng Facebook</a>
                             </div>
                         </div>
-
                         <div class="form-group">
                             <div class="col-md-12 control">
-                                Don't have an account!
-                                <a href="form_user.php">
-                                    Sign Up Here
-                                </a>
+                                Chưa có tài khoản?
+                                <a href="form_user.php">Đăng ký tại đây</a>
                             </div>
                         </div>
                     </form>
@@ -99,28 +116,20 @@ if (!empty($_POST['submit'])) {
             </div>
         </div>
     </div>
-
     <script>
-        document.getElementById('btn-login').addEventListener('click', function(e) {
-            const username = document.getElementById('login-username').value;
-
-            function generate16CharToken(id) {
-                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                let result = '';
-                for (let i = 0; i < 16; i++) {
-                    result += chars.charAt(Math.floor(Math.random() * chars.length));
-                }
-                return btoa(id + ':' + result).substring(0, 16);
+    // Lưu username vào localStorage trước khi submit
+    document.getElementById("login-form").addEventListener("submit", function(e) {
+        let username = document.getElementById("login-username").value.trim();
+        // Kiểm tra định dạng username trước khi lưu
+        if (username && /^[a-zA-Z0-9._@]+$/.test(username)) {
+            if (document.getElementById("remember").checked) {
+                localStorage.setItem("username", username);
+            } else {
+                localStorage.removeItem("username");
             }
-
-            const encodedId = generate16CharToken(username);
-            sessionStorage.setItem('session_id', encodedId);
-
-            console.log('16-char encoded session_id (pre-submit):', encodedId);
-        });
+        }
+    });
     </script>
-
-
 </body>
 
 </html>

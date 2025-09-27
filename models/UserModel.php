@@ -5,14 +5,15 @@ require_once 'BaseModel.php';
 class UserModel extends BaseModel {
 
     public function findUserById($id) {
-        $sql = 'SELECT * FROM users WHERE id = '.$id;
+        $sql = 'SELECT * FROM users WHERE id = '.intval($id);
         $user = $this->select($sql);
 
         return $user;
     }
 
     public function findUser($keyword) {
-        $sql = 'SELECT * FROM users WHERE user_name LIKE %'.$keyword.'%'. ' OR user_email LIKE %'.$keyword.'%';
+        $keyword = mysqli_real_escape_string(self::$_connection, $keyword);
+        $sql = 'SELECT * FROM users WHERE user_name LIKE "%'.$keyword.'%" OR user_email LIKE "%'.$keyword.'%"';
         $user = $this->select($sql);
 
         return $user;
@@ -25,6 +26,7 @@ class UserModel extends BaseModel {
      * @return array
      */
     public function auth($userName, $password) {
+        $userName = mysqli_real_escape_string(self::$_connection, $userName);
         $md5Password = md5($password);
         $sql = 'SELECT * FROM users WHERE name = "' . $userName . '" AND password = "'.$md5Password.'"';
 
@@ -38,7 +40,7 @@ class UserModel extends BaseModel {
      * @return mixed
      */
     public function deleteUserById($id) {
-        $sql = 'DELETE FROM users WHERE id = '.$id;
+        $sql = 'DELETE FROM users WHERE id = '.intval($id);
         return $this->delete($sql);
 
     }
@@ -65,12 +67,18 @@ class UserModel extends BaseModel {
      * @return mixed
      */
     public function insertUser($input) {
+    $name = mysqli_real_escape_string(self::$_connection, $input['name']);
+    $fullname = isset($input['fullname']) ? mysqli_real_escape_string(self::$_connection, $input['fullname']) : '';
+    $email = isset($input['email']) ? mysqli_real_escape_string(self::$_connection, $input['email']) : '';
+    $type = isset($input['type']) ? mysqli_real_escape_string(self::$_connection, $input['type']) : 'user';
+    $password = md5($input['password']);
+    
     $sql = "INSERT INTO `app_web1`.`users` (`name`, `fullname`, `email`, `type`, `password`) VALUES (" .
-        "'" . $input['name'] . "', " .
-        "'" . (isset($input['fullname']) ? $input['fullname'] : '') . "', " .
-        "'" . (isset($input['email']) ? $input['email'] : '') . "', " .
-        "'" . (isset($input['type']) ? $input['type'] : 'user') . "', " .
-        "'" . md5($input['password']) . "')";
+        "'" . $name . "', " .
+        "'" . $fullname . "', " .
+        "'" . $email . "', " .
+        "'" . $type . "', " .
+        "'" . $password . "')";
 
     $user = $this->insert($sql);
     return $user;
@@ -82,22 +90,13 @@ class UserModel extends BaseModel {
      * @return array
      */
     public function getUsers($params = []) {
-        //Keyword
         if (!empty($params['keyword'])) {
-            $sql = 'SELECT * FROM users WHERE name LIKE "%' . $params['keyword'] .'%"';
-
-            //Keep this line to use Sql Injection
-            //Don't change
-            //Example keyword: abcef%";TRUNCATE banks;##
-            $users = self::$_connection->multi_query($sql);
-
-            //Get data
-            $users = $this->query($sql);
+            $sql = 'SELECT * FROM users WHERE name LIKE "%' . mysqli_real_escape_string(self::$_connection, $params['keyword']) .'%"';
+            $users = $this->select($sql);
         } else {
             $sql = 'SELECT * FROM users';
             $users = $this->select($sql);
         }
-
         return $users;
     }
 }

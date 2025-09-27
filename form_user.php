@@ -1,76 +1,57 @@
 <?php
-// Start the session
 session_start();
-
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // sinh token mới
-}
-$csrf_token = $_SESSION['csrf_token'];
-
 require_once 'models/UserModel.php';
 $userModel = new UserModel();
 
-$user = NULL; //Add new user
+$user = NULL;
 $_id = NULL;
 
 if (!empty($_GET['id'])) {
     $_id = $_GET['id'];
-    $user = $userModel->findUserById($_id); //Update existing user
+    $user = $userModel->findUserById($_id);
 }
 
-
 if (!empty($_POST['submit'])) {
-    // CSRF check
-    if (empty($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die('CSRF token validation failed');
-    }
-
     if (!empty($_id)) {
         $userModel->updateUser($_POST);
     } else {
         $userModel->insertUser($_POST);
     }
     header('location: list_users.php');
-    exit;
 }
-
 ?>
 <!DOCTYPE html>
 <html>
 
 <head>
-    <title>User form</title>
+    <title>Biểu mẫu người dùng</title>
     <?php include 'views/meta.php' ?>
 </head>
 
 <body>
     <?php include 'views/header.php' ?>
     <div class="container">
-
         <?php if ($user || !isset($_id)) { ?>
-            <div class="alert alert-warning" role="alert">
-                User form
+        <div class="alert alert-warning" role="alert">
+            Biểu mẫu người dùng
+        </div>
+        <form method="POST">
+            <input type="hidden" name="id" value="<?php echo htmlspecialchars($_id ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+            <div class="form-group">
+                <label for="name">Tên</label>
+                <input class="form-control" name="name" placeholder="Tên"
+                    value="<?php echo htmlspecialchars($user[0]['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
             </div>
-            <form method="POST">
-                <input type="hidden" name="id" value="<?php echo $_id ?>">
-                <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
-
-                <div class="form-group">
-                    <label for="name">Name</label>
-                    <input class="form-control" name="name" placeholder="Name" value='<?php if (!empty($user[0]['name'])) echo $user[0]['name'] ?>'>
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" name="password" class="form-control" placeholder="Password">
-                </div>
-
-                <button type="submit" name="submit" value="submit" class="btn btn-primary">Submit</button>
-            </form>
+            <div class="form-group">
+                <label for="password">Mật khẩu</label>
+                <input type="password" name="password" class="form-control" placeholder="Mật khẩu">
+            </div>
+            <button type="submit" name="submit" value="submit" class="btn btn-primary">Gửi</button>
+        </form>
         <?php } else { ?>
-            <div class="alert alert-success" role="alert">
-                User not found!
-            </div>
+        <div class="alert alert-success" role="alert">
+            Không tìm thấy người dùng!
+        </div>
         <?php } ?>
     </div>
 </body>
